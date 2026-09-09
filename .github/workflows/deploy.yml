@@ -1,0 +1,69 @@
+# Publica el Centro de Documentación en GitHub Pages.
+#
+# El repositorio guarda el CODIGO FUENTE (React + Vite), no la web: el
+# navegador no entiende .tsx, asi que hay que compilarlo antes de servirlo.
+# Este flujo lo hace en cada push a main y sube el resultado a Pages.
+#
+# Sobre --base: el sitio vive en /Pagina-WEB.1/ y no en la raiz del dominio.
+# Sin decirselo, Vite genera rutas absolutas (/assets/index-xxx.js) que ahi
+# apuntarian fuera del proyecto: 404 y pantalla en blanco. Se pasa por linea
+# de comandos a proposito, para no tener que tocar vite.config.ts.
+name: Publicar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # Permite lanzarlo a mano desde la pestaña Actions, sin esperar a un push.
+  workflow_dispatch:
+
+# Permisos minimos: leer el repo y poder publicar en Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Si se empujan dos cambios seguidos, que el segundo espere en vez de pelearse
+# con el primero por la publicacion.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Traer el codigo
+        uses: actions/checkout@v4
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # npm install y no npm ci: el repositorio no lleva package-lock.json,
+      # y npm ci lo exige. Si algun dia se añade el lockfile, conviene
+      # cambiarlo a `npm ci`, que es reproducible.
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Compilar
+        run: npx vite build --base=/Pagina-WEB.1/
+
+      - name: Preparar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir lo compilado
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  publicar:
+    needs: construir
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - name: Publicar
+        id: despliegue
+        uses: actions/deploy-pages@v4
